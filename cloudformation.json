@@ -1,0 +1,808 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Our Rails App CF Template",
+  "Metadata": {},
+  "Parameters":{
+    "StageName": {
+      "Type": "String",
+      "Default": "development",
+      "AllowedValues": ["development", "staging", "production"],
+      "Description": "The current environment, one of development, staging, or production."
+    },
+    "SSHKeyName": {
+      "Type": "String"
+    },
+    "SecretKeyBase" : {
+      "Type":"String"
+    }
+  },
+  "Mappings":{
+    "ECS": {
+      "ServiceClusterInstanceSize": {
+        "development": "t2.small",
+        "staging": "t2.small",
+        "production": "t2.large"
+      }
+    }
+  },
+  "Conditions":{},
+  "Resources": {
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.1.0.0/16",
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": {
+              "Ref": "AWS::StackId"
+            }
+          },
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                " ",
+                [
+                  {
+                    "Ref": "StageName"
+                  },
+                  "StageName"
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "AvailabilityZone": "us-east-1a",
+        "CidrBlock": "10.1.2.0/24",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Public subnet (",
+                    {
+                      "Ref": "StageName"
+                    },
+                    ")"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PublicSubnetIGW": {
+      "Type": "AWS::EC2::InternetGateway",
+      "DependsOn": [
+        "VPC"
+      ]
+    },
+    "PublicSubnetIGWAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "DependsOn": [
+        "VPC"
+      ],
+      "Properties": {
+        "InternetGatewayId": {
+          "Ref": "PublicSubnetIGW"
+        },
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PublicSubnetRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "StageName"
+                  },
+                  "-PUBLIC_SUBNET-RT"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PublicSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        }
+      }
+    },
+    "PublicSubnetIGWRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "PublicSubnetIGW"
+        },
+        "RouteTableId": {
+          "Ref": "PublicSubnetRouteTable"
+        }
+      },
+      "DependsOn": [
+        "PublicSubnetIGW",
+        "PublicSubnetIGWAttachment"
+      ]
+    },
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "AvailabilityZone": "us-east-1a",
+        "CidrBlock": "10.1.1.0/24",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Private subnet (",
+                    {
+                      "Ref": "StageName"
+                    },
+                    ")"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PrivateSubnetRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  {
+                    "Ref": "StageName"
+                  },
+                  "-PRIVATE_SUBNET-RT"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PrivateSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateSubnetRouteTable"
+        }
+      }
+    },
+    "RailsAppCluster": {
+      "Type": "AWS::ECS::Cluster"
+    },
+    "ECSInstanceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com",
+                  "ecs.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "ServiceRole",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ECSInstanceRoleProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "ECSInstanceRole"
+          }
+        ]
+      }
+    },
+    "RailsAppELBSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group specific to the ECS Load Balancer",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "80",
+            "ToPort": "80"
+          },
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "443",
+            "ToPort": "443"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "RailsAppUIELBSG"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "RailsAppElasticLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "DependsOn": [
+        "PublicSubnetIGWAttachment"
+      ],
+      "Properties": {
+        "Subnets": [
+          {
+            "Ref": "PublicSubnet"
+          }
+        ],
+        "Scheme": "internet-facing",
+        "SecurityGroups": [
+          {
+            "Ref": "RailsAppELBSG"
+          }
+        ],
+        "Listeners": [
+          {
+            "LoadBalancerPort": "80",
+            "InstancePort": "3000",
+            "Protocol": "HTTP"
+          }
+        ],
+        "HealthCheck": {
+          "Target": "HTTP:3000/",
+          "HealthyThreshold": "2",
+          "UnhealthyThreshold": "10",
+          "Interval": "30",
+          "Timeout": "5"
+        }
+      }
+    },
+    "RailsAppAutoScalingGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "RailsApp-",
+                  {
+                    "Ref": "AWS::StackName"
+                  }
+                ]
+              ]
+            },
+            "PropagateAtLaunch": "true"
+          }
+        ],
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "PrivateSubnet"
+          }
+        ],
+        "LaunchConfigurationName": {
+          "Ref": "EC2LaunchConfiguration"
+        },
+        "MinSize": "2",
+        "MaxSize": "2",
+        "DesiredCapacity": "2"
+      },
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Timeout": "PT15M"
+        }
+      },
+      "UpdatePolicy": {
+        "AutoScalingRollingUpdate": {
+          "MinInstancesInService": "1",
+          "MaxBatchSize": "1",
+          "PauseTime": "PT15M",
+          "WaitOnResourceSignals": "true"
+        }
+      }
+    },
+    "EC2LaunchConfiguration": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "config": {
+            "files": {
+              "/etc/ecs/ecs.config": {
+                "content": {
+                  "Fn::Join":  [
+                    "",
+                    [
+                      "ECS_CLUSTER=",
+                      {
+                        "Ref": "RailsAppCluster"
+                      }
+                    ]
+                  ]
+                }
+              },
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n"
+                    ]
+                  ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.EC2LaunchConfiguration.Metadata.AWS::CloudFormation::Init\n",
+                      "action=/opt/aws/bin/cfn-init -v ",
+                      "         --stack ",
+                      {
+                        "Ref": "AWS::StackName"
+                      },
+                      "         --resource EC2LaunchConfiguration",
+                      "         --region ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Properties": {
+        "ImageId": "ami-a88a46c5",
+        "InstanceType": {
+          "Fn::FindInMap": [
+            "ECS",
+            "ServiceClusterInstanceSize",
+            {
+              "Ref": "StageName"
+            }
+          ]
+        },
+        "KeyName": {
+          "Ref": "SSHKeyName"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "ContainerInstanceSG"
+          }
+        ],
+        "IamInstanceProfile": {
+          "Ref": "ECSInstanceRoleProfile"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -xe\n",
+                "yum install -y aws-cfn-bootstrap\n",
+                "/opt/aws/bin/cfn-init -v ",
+                "         --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "         --resource EC2LaunchConfiguration ",
+                "         --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "/opt/aws/bin/cfn-signal --exit-code $? ",
+                " --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                " --resource RailsAppAutoScalingGroup ",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "ContainerInstanceSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group specific to the NAT instance",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "22",
+            "ToPort": "22"
+          },
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "3000",
+            "ToPort": "3000"
+          },
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "10.1.1.0/24",
+            "FromPort": "-1",
+            "ToPort": "-1"
+          },
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "10.1.2.0/24",
+            "FromPort": "-1",
+            "ToPort": "-1"
+          },
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "10.1.3.0/24",
+            "FromPort": "-1",
+            "ToPort": "-1"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "ContainerInstanceSG"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "ServiceRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com",
+                  "ecs.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "ServiceRole",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "RailsAppTaskDefinition": {
+      "Type": "AWS::ECS::TaskDefinition", "Properties" : {
+        "ContainerDefinitions" : [ {
+          "VolumesFrom": [],
+          "PortMappings": [
+            {
+              "HostPort": "3000",
+              "ContainerPort": "3000"
+            }
+          ],
+          "LogConfiguration": {
+            "LogDriver": "json-file",
+            "Options": { "max-size": "50m", "max-file": "5" }
+          },
+          "Command": [],
+          "Environment": [
+            {
+              "Name": "RAILS_ENV",
+              "Value": "production"
+            },
+            {
+              "Name": "SECRET_KEY_BASE",
+              "Value":
+              { "Ref": "SecretKeyBase" }
+            }
+
+          ],
+          "Essential": true,
+          "EntryPoint": [],
+          "Links": [],
+          "MountPoints": [],
+          "Memory": 512,
+          "Name": "rails-app",
+          "Cpu": 50,
+          "Image": "ruprict/vanilla-rails:v_3"
+        } ]
+      }
+    },
+    "RailsAppService": {
+      "Type": "AWS::ECS::Service",
+      "DependsOn": [
+        "RailsAppAutoScalingGroup",
+        "ServiceRole",
+        "ECSInstanceRoleProfile",
+        "ECSInstanceRole",
+        "RailsAppELBSG",
+        "RailsAppElasticLoadBalancer"
+      ],
+      "Properties": {
+        "Cluster": {
+          "Ref": "RailsAppCluster"
+        },
+        "DeploymentConfiguration": {
+          "MinimumHealthyPercent": 100
+        },
+        "DesiredCount": "1",
+        "Role": {
+          "Ref": "ServiceRole"
+        },
+        "LoadBalancers": [
+          {
+            "ContainerName": "rails-app",
+            "ContainerPort": "3000",
+            "LoadBalancerName": {
+              "Ref": "RailsAppElasticLoadBalancer"
+            }
+          }
+        ],
+        "TaskDefinition": {
+          "Ref": "RailsAppTaskDefinition"
+        }
+      }
+    },
+    "Bastion": {
+      "Type": "AWS::EC2::Instance",
+      "Metadata": {
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "network": [
+              "config"
+            ]
+          }
+        }
+      },
+      "Properties": {
+        "AvailabilityZone": "us-east-1a",
+        "ImageId": "ami-184dc970",
+        "InstanceType": "t2.micro",
+        "SecurityGroupIds": [
+          {
+            "Ref": "NATSG"
+          }
+        ],
+        "SubnetId": {
+          "Ref": "PublicSubnet"
+        },
+        "SourceDestCheck": false,
+        "KeyName": {
+          "Ref": "SSHKeyName"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "NAT-INSTANCE (",
+                  {
+                    "Ref": "StageName"
+                  },
+                  ")"
+                ]
+              ]
+            }
+          },
+          {
+            "Key": "Network",
+            "Value": {
+              "Ref": "StageName"
+            }
+          }
+        ],
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -xe\n",
+                "yum update -y aws-cfn-bootstrap\n",
+                "# Install the files and packages from the metadata\n",
+                "/opt/aws/bin/cfn-init -v ",
+                "         --stack ",
+                {
+                  "Ref": "AWS::StackName"
+                },
+                "         --resource Bastion",
+                "         --configsets network\n",
+                "\n",
+                "# Reloads iptables\n",
+                "service iptables restart\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "NATSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Security group specific to the NAT(bastion) instance",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "22",
+            "ToPort": "22"
+          },
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "10.1.1.0/24",
+            "FromPort": "-1",
+            "ToPort": "-1"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NATSG"
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "PrivateSubnetNatRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "InstanceId": {
+          "Ref": "Bastion"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateSubnetRouteTable"
+        }
+      }
+    },
+    "NatGatewayEIP": {
+       "Type": "AWS::EC2::EIP",
+       "Properties": {
+          "Domain": "vpc"
+       }
+    },
+
+    "NatGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "AllocationId": { "Fn::GetAtt": [ "NatGatewayEIP", "AllocationId" ] },
+        "SubnetId": { "Ref": "PublicSubnet" }
+      }
+    }
+  },
+  "Outputs":{}
+}
