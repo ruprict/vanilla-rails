@@ -4,3 +4,12 @@ services:
     build: .
     ports:
       - 3000:3000
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/vanilla_rails_development
+  db:
+    image: postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_USER=postgres

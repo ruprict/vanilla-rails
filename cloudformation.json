@@ -14,6 +14,14 @@
     },
     "SecretKeyBase" : {
       "Type":"String"
+    },
+    "RDSMasterUsername" : {
+      "Type":"String",
+      "Default": "skookum"
+    },
+    "RDSMasterPassword" : {
+      "Type":"String",
+      "Default": "!vAni11aRail5!"
     }
   },
   "Mappings":{
@@ -218,7 +226,10 @@
       }
     },
     "RailsAppCluster": {
-      "Type": "AWS::ECS::Cluster"
+      "Type": "AWS::ECS::Cluster",
+      "Properties" : {
+          "ClusterName" : "VanillaRailsAppCluster"
+      }
     },
     "ECSInstanceRole": {
       "Type": "AWS::IAM::Role",
@@ -296,6 +307,34 @@
         "VpcId": {
           "Ref": "VPC"
         }
+      }
+    },
+    "RailsAppTargetGroup" : {
+      "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties" : {
+        "Port": 3000,
+        "Protocol": "HTTP",
+        "HealthCheckPath": "/",
+        "VpcId": {"Ref" : "VPC"}
+      }
+    },
+    "RailsAppListenerRule": {
+      "Type" : "AWS::ElasticLoadBalancingV2::ListenerRule",
+      "Properties" : {
+        "Actions" : [
+          {
+            "TargetGroupArn" : {"Ref": "RailsAppTargetGroup"},
+            "Type" : "forward"
+          }
+        ],
+        "Conditions" : [
+          {
+            "Field" : "path-pattern",
+            "Values" : [ "/" ]
+          }
+        ],
+        "ListenerArn" : {"Ref": "Listener"},
+        "Priority" : 1
       }
     },
     "RailsAppElasticLoadBalancer": {
@@ -607,13 +646,16 @@
           "VolumesFrom": [],
           "PortMappings": [
             {
-              "HostPort": "3000",
               "ContainerPort": "3000"
             }
           ],
           "LogConfiguration": {
-            "LogDriver": "json-file",
-            "Options": { "max-size": "50m", "max-file": "5" }
+            "LogDriver": "awslogs",
+            "Options": {
+                    "awslogs-group": "/geg/test/vanilla-rails",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "rails-logs"
+            }
           },
           "Command": [],
           "Environment": [
@@ -625,7 +667,19 @@
               "Name": "SECRET_KEY_BASE",
               "Value":
               { "Ref": "SecretKeyBase" }
-            }
+            },
+            {
+              "Name": "DATABASE_URL",
+              "Value": { "Fn::Join": [ "", [
+                "postgres://",
+                { "Ref": "RDSMasterUsername"},
+                ":",
+                { "Ref": "RDSMasterPassword"},
+                "@",
+                { "Fn::GetAtt": [ "RDSInstance", "Endpoint.Address" ] },
+                ":5432"
+              ]] }
+            },
 
           ],
           "Essential": true,
@@ -635,7 +689,7 @@
           "Memory": 512,
           "Name": "rails-app",
           "Cpu": 50,
-          "Image": "ruprict/vanilla-rails:v_3"
+          "Image": "ruprict/vanilla-rails:v_4"
         } ]
       }
     },
@@ -650,6 +704,7 @@
         "RailsAppElasticLoadBalancer"
       ],
       "Properties": {
+        "ServiceName" : "RailsAppService",
         "Cluster": {
           "Ref": "RailsAppCluster"
         },
@@ -660,13 +715,11 @@
         "Role": {
           "Ref": "ServiceRole"
         },
-        "LoadBalancers": [
+       "LoadBalancers": [
           {
             "ContainerName": "rails-app",
             "ContainerPort": "3000",
-            "LoadBalancerName": {
-              "Ref": "RailsAppElasticLoadBalancer"
-            }
+            "TargetGroupArn" : { "Ref" : "RailsAppTargetGroup" }
           }
         ],
         "TaskDefinition": {
@@ -801,6 +854,124 @@
       "Properties": {
         "AllocationId": { "Fn::GetAtt": [ "NatGatewayEIP", "AllocationId" ] },
         "SubnetId": { "Ref": "PublicSubnet" }
+      }
+    },
+ "RDSSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupDescription": "DB Subnet Group",
+        "SubnetIds": [
+          {
+            "Ref": "PrivateSubnet"
+          },
+          {
+            "Ref": "SecondaryPrivateSubnet"
+          }
+        ]
+      }
+    },
+    "RDSSG": {
+      "Type": "AWS::RDS::DBSecurityGroup",
+      "Properties": {
+        "EC2VpcId": {
+          "Ref": "VPC"
+        },
+        "DBSecurityGroupIngress": [
+          {
+            "CIDRIP": "0.0.0.0/0"
+          }
+        ],
+        "GroupDescription": "SG for  RDS"
+      }
+    },
+    "RDSInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBName": {
+              "Fn::Join": [
+                "",
+                [
+                  "vanilla_rails_",
+                  {
+                    "Ref": "StageName"
+                  }
+                ]
+              ]
+            },
+        "DBSubnetGroupName": {
+          "Ref": "RDSSubnetGroup"
+        },
+        "AllocatedStorage": "10",
+        "DBInstanceClass": "db.t2.small",
+        "Engine": "postgres",
+        "EngineVersion": "9.4",
+        "MasterUsername": {
+          "Ref": "RDSMasterUsername"
+        },
+        "MasterUserPassword": {
+          "Ref": "RDSMasterPassword"
+        },
+        "DBSecurityGroups": [
+          {
+            "Ref": "RDSSG"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Rails-DB-",
+                  {
+                    "Ref": "StageName"
+                  }
+                ]
+              ]
+            }
+          }
+        ]
+      },
+      "DeletionPolicy": "Snapshot"
+    },
+    "PrivateSubnetRouteTableAssociationSecondary": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "SecondaryPrivateSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateSubnetRouteTable"
+        }
+      }
+    },
+    "SecondaryPrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "AvailabilityZone": "us-east-1c",
+        "CidrBlock": "10.1.3.0/24",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "Secondary Private subnet(",
+                    {
+                      "Ref": "StageName"
+                    },
+                    ")"
+                ]
+              ]
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
       }
     }
   },

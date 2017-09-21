@@ -1,7 +1,7 @@
 FROM alpine:3.4
 MAINTAINER Glenn Goodrich <glenn.goodrich@skookum.com>
 
-ENV BUILD_PACKAGES curl-dev ruby-dev build-base openssl-dev libxml2-dev libxslt-dev libgcrypt libffi-dev git ncurses tzdata sqlite-dev
+ENV BUILD_PACKAGES curl-dev ruby-dev build-base openssl-dev libxml2-dev libxslt-dev libgcrypt libffi-dev git ncurses tzdata postgresql-dev
 ENV RUBY_PACKAGES ruby ruby-irb ruby-json ruby-rake ruby-io-console ruby-bundler ruby-bigdecimal nodejs
 
 # Update the package manager
