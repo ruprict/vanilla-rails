@@ -21,7 +21,11 @@ ADD Gemfile.lock Gemfile.lock
 RUN gem install bundler --no-rdoc --no-ri
 RUN bundle install --jobs 20 --retry 5
 
+RUN npm install -g -s --no-progress yarn
+
+
 ADD . /app
 WORKDIR /app
+RUN RAILS_ENV=production rails assets:precompile
 
 CMD ["bin/rails", "server", "-b", "0.0.0.0"]

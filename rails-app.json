@@ -1,0 +1,46 @@
+{
+  "family": "rails-app",
+  "networkMode": "bridge",
+  "containerDefinitions": [
+    {
+      "name": "",
+      "image": "ruprict/vanilla-rails:v_BUILD_NUMBER",
+      "cpu": 50,
+      "memory": 512,
+      "memoryReservation": 0,
+      "environment": [
+        {
+          "name": "DATABASE_URL",
+          "value": "postgres://skookum:!vAni11aRail5!@vrlt0uskqeghsg.cnemtkddchpq.us-east-1.rds.amazonaws.com:5432"
+        },
+        {
+          "name": "RAILS_ENV",
+          "value": "production"
+        },
+        {
+          "name": "SECRET_KEY_BASE",
+          "value": "4c85d39ec8d6462099152f99173340a6c60f354c0c5dcbc2616525dea52a40484d691c74ae10909932b161c9691c892e3397bcb6b6d4f8b4cffe8d5bb073ed8a"
+        }
+      ],
+      "portMappings": [
+        {
+          "hostPort": 0,
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "entryPoint": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/geg/test/vanilla-rails",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "rails-logs"
+        }
+      }
+    }
+  ],
+  "volumes": [],
+  "placementConstraints": []
+}
