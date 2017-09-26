@@ -7,7 +7,7 @@
       "image": "ruprict/vanilla-rails:v_BUILD_NUMBER",
       "cpu": 50,
       "memory": 512,
-      "memoryReservation": 0,
+      "memoryReservation": null,
       "environment": [
         {
           "name": "DATABASE_URL",
