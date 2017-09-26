@@ -17,6 +17,10 @@
           "value": "production"
         },
         {
+          "name": "RAILS_SERVE_STATIC_FILES",
+          "value": "true"
+        },
+        {
           "name": "SECRET_KEY_BASE",
           "value": "4c85d39ec8d6462099152f99173340a6c60f354c0c5dcbc2616525dea52a40484d691c74ae10909932b161c9691c892e3397bcb6b6d4f8b4cffe8d5bb073ed8a"
         }
