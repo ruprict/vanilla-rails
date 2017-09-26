@@ -695,6 +695,10 @@
               "Value": "production"
             },
             {
+              "Name": "RAILS_SERVE_STATIC_FILES",
+              "Value": "true"
+            },
+            {
               "Name": "SECRET_KEY_BASE",
               "Value":
               { "Ref": "SecretKeyBase" }
@@ -720,7 +724,7 @@
           "Memory": 512,
           "Name": "rails-app",
           "Cpu": 50,
-          "Image": "ruprict/vanilla-rails:v_5"
+          "Image": "582274403721.dkr.ecr.us-east-1.amazonaws.com/vanilla-rails:v_50"
         } ]
       }
     },
