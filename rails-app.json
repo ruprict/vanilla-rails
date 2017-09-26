@@ -4,7 +4,7 @@
   "containerDefinitions": [
     {
       "name": "rails-app",
-      "image": "ruprict/vanilla-rails:v_BUILD_NUMBER",
+      "image": "582274403721.dkr.ecr.us-east-1.amazonaws.com/vanilla-rails:v_BUILD_NUMBER",
       "cpu": 50,
       "memory": 512,
       "environment": [
