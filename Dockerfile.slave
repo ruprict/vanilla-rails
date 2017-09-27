@@ -1,0 +1,19 @@
+FROM jenkinsci/jnlp-slave:latest
+MAINTAINER Glenn Goodrich <glenn.goodrich@skookum.com>
+
+USER root
+
+RUN \
+    apt-get update && \
+    apt-get install -y \
+        build-essential \
+        bzip2 \
+        ca-certificates \
+        daemontools \
+        libssl-dev \
+        python-dev \
+        python-setuptools && \
+    easy_install pip && \
+    pip install --upgrade setuptools && \
+    pip install awscli
+

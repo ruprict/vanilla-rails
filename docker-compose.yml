@@ -6,6 +6,8 @@ services:
       - 3000:3000
     environment:
       - DATABASE_URL=postgres://postgres:postgres@db:5432/vanilla_rails_development
+    volumes:
+      - .:/app
   db:
     image: postgres
     ports:

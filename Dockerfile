@@ -17,14 +17,14 @@ RUN mkdir /app
 
 WORKDIR /tmp
 COPY Gemfile Gemfile
-ADD Gemfile.lock Gemfile.lock
+COPY Gemfile.lock Gemfile.lock
 RUN gem install bundler --no-rdoc --no-ri
 RUN bundle install --jobs 20 --retry 5
 
 RUN npm install -g -s --no-progress yarn
 
 
-ADD . /app
+COPY . /app
 WORKDIR /app
 RUN RAILS_ENV=production rails assets:precompile
 
