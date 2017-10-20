@@ -10,7 +10,7 @@
       "environment": [
         {
           "name": "DATABASE_URL",
-          "value": "postgres://skookum:!vAni11aRail5!@vrlt0uskqeghsg.cnemtkddchpq.us-east-1.rds.amazonaws.com:5432"
+          "value": "postgres://skookum:!vAni11aRail5!@vr114cdewypdqln.cnemtkddchpq.us-east-1.rds.amazonaws.com:5432"
         },
         {
           "name": "RAILS_ENV",

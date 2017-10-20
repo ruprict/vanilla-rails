@@ -724,7 +724,7 @@
           "Memory": 512,
           "Name": "rails-app",
           "Cpu": 50,
-          "Image": "582274403721.dkr.ecr.us-east-1.amazonaws.com/vanilla-rails:v_50"
+          "Image": "582274403721.dkr.ecr.us-east-1.amazonaws.com/vanilla-rails:latest"
         } ]
       }
     },
