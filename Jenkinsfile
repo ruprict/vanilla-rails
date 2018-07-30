@@ -1,4 +1,4 @@
-node {
+node("jnlp-slave-with-aws") {
   stage('Checkout') {
     checkout scm
   }
